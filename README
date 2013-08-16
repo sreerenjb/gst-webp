@@ -1,0 +1,6 @@
+This repository contains gstreamer plugin to handle the webp imageformat.
+Elements in libgstwebp:
+
+-- webpdec
+-- webpenc (todo)
+-- webpmux (todo)
