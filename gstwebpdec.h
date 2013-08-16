@@ -54,6 +54,7 @@ struct _GstWebPDec {
 
   gboolean saw_header;
   guint frame_size;
+  GstClockTime pts;
 
   /* properties */
   gboolean bypass_filtering;

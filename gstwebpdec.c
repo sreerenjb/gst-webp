@@ -136,6 +136,8 @@ gst_webp_dec_init (GstWebPDec * dec)
 
   memset (&dec->config, 0, sizeof (dec->config));
   dec->saw_header = FALSE;
+  dec->frame_size = 0;
+  dec->pts = 0;
 
   dec->bypass_filtering = FALSE;
   dec->no_fancy_upsampling = FALSE;
@@ -148,6 +150,7 @@ gst_webp_dec_reset_frame (GstWebPDec * webpdec)
   GST_DEBUG ("Reset the current frame properties");
 
   webpdec->saw_header = FALSE;
+  webpdec->frame_size = 0;
 
   if (!WebPInitDecoderConfig (&webpdec->config)) {
     GST_WARNING_OBJECT (webpdec,
@@ -398,6 +401,18 @@ beach:
   return GST_FLOW_OK;
 }
 
+static guint64
+gst_webp_dec_get_frame_duration (GstWebPDec * dec)
+{
+  GstVideoCodecState *state = dec->output_state;
+
+  if (state == NULL || state->info.fps_d == 0 || state->info.fps_n <= 1)
+    return GST_CLOCK_TIME_NONE;
+
+  return gst_util_uint64_scale (GST_SECOND, state->info.fps_d,
+      state->info.fps_n);
+}
+
 static GstFlowReturn
 gst_webp_dec_handle_frame (GstVideoDecoder * decoder,
     GstVideoCodecFrame * frame)
@@ -407,6 +422,7 @@ gst_webp_dec_handle_frame (GstVideoDecoder * decoder,
   gint width, height;
   GstFlowReturn ret = GST_FLOW_OK;
   GstVideoFrame vframe;
+  gint64 duration;
   WEBP_CSP_MODE colorspace;
 
   gst_buffer_map (frame->input_buffer, &map_info, GST_MAP_READ);
@@ -449,6 +465,14 @@ gst_webp_dec_handle_frame (GstVideoDecoder * decoder,
 
   gst_video_frame_unmap (&vframe);
   gst_buffer_unmap (frame->input_buffer, &map_info);
+
+  /* try to find a reasonable pts value if upstream provided fps > 1 */
+  duration = gst_webp_dec_get_frame_duration (webpdec);
+  if (GST_CLOCK_TIME_IS_VALID (duration)) {
+    webpdec->pts += duration;
+    frame->pts = webpdec->pts - duration;
+    frame->duration = duration;
+  }
 
   ret = gst_video_decoder_finish_frame (decoder, frame);
 
